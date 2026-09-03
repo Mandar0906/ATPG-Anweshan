@@ -325,6 +325,7 @@ conn.commit()
 stu_me = insert("student", name="Example1_LateMinorAspirant", curriculum_version_id=cv_me_y24, current_semester=6, cpi=8.5)
 stu_ae = insert("student", name="Example2_CareerFocused", curriculum_version_id=cv_ae_y23, current_semester=5, cpi=8.0)
 stu_mse = insert("student", name="Example3_PrereqBottleneck", curriculum_version_id=cv_mse_y24, current_semester=4, cpi=7.6)
+stu_egrade = insert("student", name="Example4_EGrade_SatisfiedSlot", curriculum_version_id=cv_mse_y24, current_semester=5, cpi=7.2)
 
 # ME student: passed everything through Sem5, Sem6 core in progress, no minor declared yet.
 me_passed_codes = ["MTH101", "PHY101", "CHM101", "TA101", "MTH102", "PHY102", "ESC101",
@@ -349,8 +350,16 @@ for code in mse_passed_codes:
 insert("student_completed_course", student_id=stu_mse, course_id=course_id["MSE201"], semester_taken=3, grade_status="FAILED")
 insert("student_preference", student_id=stu_mse, max_credits_per_semester=55, allow_summer=False, willing_to_extend=False, career_interest_tags=[])
 
+# MSE student 2 (Example 4): E_GRADE in MSE201, satisfied slot for MSEDE1
+mse4_passed_codes = ["MTH101", "PHY101", "CHM101", "TA101", "MTH102", "PHY102", "ESC101", "MSE203", "MSE202", "MSE205"]
+for code in mse4_passed_codes:
+    insert("student_completed_course", student_id=stu_egrade, course_id=course_id[code], semester_taken=3, grade_status="PASSED")
+insert("student_completed_course", student_id=stu_egrade, course_id=course_id["MSE201"], semester_taken=3, grade_status="E_GRADE")
+insert("student_satisfied_slot", student_id=stu_egrade, curriculum_course_id=cc_id[(cv_mse_y24, "MSEDE1")])
+insert("student_preference", student_id=stu_egrade, max_credits_per_semester=55, allow_summer=False, willing_to_extend=True, career_interest_tags=[])
+
 conn.commit()
 print("Seed complete.")
-print(f"student ids -> ME(Example1)={stu_me}  AE(Example2)={stu_ae}  MSE(Example3)={stu_mse}")
+print(f"student ids -> ME(Example1)={stu_me}  AE(Example2)={stu_ae}  MSE(Example3)={stu_mse}  MSE(Example4)={stu_egrade}")
 cur.close()
 conn.close()

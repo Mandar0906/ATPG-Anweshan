@@ -111,7 +111,7 @@ CREATE TABLE student_completed_course (
     student_id    INTEGER NOT NULL REFERENCES student(id),
     course_id     INTEGER NOT NULL REFERENCES course(id),
     semester_taken INTEGER,
-    grade_status  VARCHAR(12) NOT NULL CHECK (grade_status IN ('PASSED','FAILED','IN_PROGRESS')),
+    grade_status  VARCHAR(12) NOT NULL CHECK (grade_status IN ('PASSED','FAILED','IN_PROGRESS','E_GRADE')),
     UNIQUE (student_id, course_id)
 );
 CREATE INDEX idx_completed_student ON student_completed_course(student_id);
@@ -187,3 +187,9 @@ CREATE TABLE risk_flag (
     detail                 TEXT NOT NULL
 );
 CREATE INDEX idx_risk_roadmap ON risk_flag(roadmap_id);
+
+CREATE TABLE student_satisfied_slot (
+    student_id             INTEGER NOT NULL REFERENCES student(id),
+    curriculum_course_id   INTEGER NOT NULL REFERENCES curriculum_course(id),
+    PRIMARY KEY (student_id, curriculum_course_id)
+);

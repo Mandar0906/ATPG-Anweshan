@@ -93,6 +93,8 @@ class StudentState:
     passed_course_ids: set          # global course_id, grade_status = PASSED
     failed_course_ids: set          # grade_status = FAILED (still owed)
     in_progress_course_ids: set
+    e_grade_course_ids: set
+    satisfied_slot_ids: set
     target_programme_ids: list
     declared_programme_ids: list
     max_credits_per_semester: Optional[int]
@@ -186,14 +188,19 @@ def load_student(student_id: int) -> StudentState:
     s = cur.fetchone()
 
     cur.execute("select course_id, grade_status from student_completed_course where student_id = %s", (student_id,))
-    passed, failed, in_progress = set(), set(), set()
+    passed, failed, in_progress, e_grade = set(), set(), set(), set()
     for row in cur.fetchall():
         if row["grade_status"] == "PASSED":
             passed.add(row["course_id"])
         elif row["grade_status"] == "FAILED":
             failed.add(row["course_id"])
+        elif row["grade_status"] == "E_GRADE":
+            e_grade.add(row["course_id"])
         else:
             in_progress.add(row["course_id"])
+
+    cur.execute("select curriculum_course_id from student_satisfied_slot where student_id = %s", (student_id,))
+    satisfied_slots = {row["curriculum_course_id"] for row in cur.fetchall()}
 
     cur.execute("select programme_id, status from student_declared_programme where student_id = %s", (student_id,))
     target, declared = [], []
@@ -208,6 +215,7 @@ def load_student(student_id: int) -> StudentState:
         id=s["id"], name=s["name"], current_semester=s["current_semester"], cpi=float(s["cpi"]),
         curriculum_version_id=s["curriculum_version_id"],
         passed_course_ids=passed, failed_course_ids=failed, in_progress_course_ids=in_progress,
+        e_grade_course_ids=e_grade, satisfied_slot_ids=satisfied_slots,
         target_programme_ids=target, declared_programme_ids=declared,
         max_credits_per_semester=pref.get("max_credits_per_semester"),
         allow_summer=pref.get("allow_summer", False),

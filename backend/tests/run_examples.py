@@ -84,6 +84,19 @@ check("A semester_shift explanation was recorded for MSEADVELEC (requested 5 -> 
       r3["primary"] and any(s["code"] == "MSEADVELEC" for s in r3["primary"]["semester_shifts"]))
 
 print("\n" + "=" * 80)
+print("EXAMPLE 4 -- MSE Y24, Sem5, E_GRADE in MSE201, Satisfied Slot MSEDE1")
+print("=" * 80)
+r4 = generate_roadmap(student_id=4, forced_elective_codes=["MSEADVELEC"], requested_semester_hints={"MSEADVELEC": 5})
+print_roadmap("Example 4", r4)
+check("Status is FEASIBLE (or FEASIBLE_WITH_ADJUSTMENT)", r4["status"] in ("FEASIBLE", "FEASIBLE_WITH_ADJUSTMENT"))
+check("MSEADVELEC is scheduled in semester 5 because MSE201 (E_GRADE) satisfies the prerequisite",
+      r4["primary"] and any(c["code"] == "MSEADVELEC" for c in r4["primary"]["semesters"].get(5, {}).get("courses", [])) or (r4["primary"] and any(s["code"] == "MSEADVELEC" for s in r4["primary"]["semester_shifts"])))
+check("MSE201 (the E-graded prerequisite) is retaken in semester 5 or later",
+      r4["primary"] and any(c["code"] == "MSE201" for sem, info in r4["primary"]["semesters"].items() for c in info["courses"]))
+check("MSEDE1 is NOT scheduled (slot is already satisfied)",
+      r4["primary"] and not any(c["code"] == "MSEDE1" for sem, info in r4["primary"]["semesters"].items() for c in info["courses"]))
+
+print("\n" + "=" * 80)
 total, passed = len(results), sum(results)
 print(f"RESULT: {passed}/{total} checks passed")
 print("=" * 80)

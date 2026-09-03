@@ -29,7 +29,7 @@ def structurally_infeasible_nodes(curriculum: Curriculum, student: StudentState,
     exceeds_horizon = []
     for cc_id in required_cc_ids:
         node = curriculum.nodes[cc_id]
-        if node.course_id in student.passed_course_ids:
+        if node.course_id in student.passed_course_ids or cc_id in student.satisfied_slot_ids:
             continue
         ee, ec = bounds[cc_id]
         if ec is None:
@@ -74,7 +74,7 @@ def search_placement(curriculum: Curriculum, student: StudentState, required_cc_
     if never or exceeds:
         return None, trace
 
-    to_place = {cc_id for cc_id in required_cc_ids if curriculum.nodes[cc_id].course_id not in student.passed_course_ids}
+    to_place = {cc_id for cc_id in required_cc_ids if curriculum.nodes[cc_id].course_id not in student.passed_course_ids and cc_id not in student.satisfied_slot_ids}
     max_credits = curriculum.credit_rule.max_credits_per_semester
     if student.max_credits_per_semester is not None:
         max_credits = min(max_credits, student.max_credits_per_semester)
@@ -82,7 +82,7 @@ def search_placement(curriculum: Curriculum, student: StudentState, required_cc_
     call_count = {"n": 0}
 
     def satisfied_course_ids(scheduled_by_earlier_sem: dict):
-        return student.passed_course_ids | set(scheduled_by_earlier_sem.keys())
+        return student.passed_course_ids | student.e_grade_course_ids | set(scheduled_by_earlier_sem.keys())
 
     def recurse(sem, remaining, scheduled_completion, assignments):
         call_count["n"] += 1

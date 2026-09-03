@@ -22,7 +22,8 @@ from .risk import compute_risk_flags
 
 def _remaining_by_category(curriculum: Curriculum, student: StudentState, category: str):
     return [n for n in curriculum.nodes.values()
-            if n.category == category and n.course_id not in student.passed_course_ids]
+            if n.category == category and n.course_id not in student.passed_course_ids
+            and n.id not in student.satisfied_slot_ids]
 
 
 def _attempt(curriculum, student, mandatory_ids, de_pool, oe_pool, minor_ids,
@@ -93,7 +94,8 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
     bounds = compute_earliest_possible(curriculum, student, start_sem)
 
     mandatory = {n.id for n in curriculum.nodes.values()
-                 if n.category in ("CORE", "HSS") and n.course_id not in student.passed_course_ids}
+                 if n.category in ("CORE", "HSS") and n.course_id not in student.passed_course_ids
+                 and n.id not in student.satisfied_slot_ids}
 
     de_pool_all = _remaining_by_category(curriculum, student, "DE")
     oe_pool_all = _remaining_by_category(curriculum, student, "OE")
@@ -105,8 +107,13 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
                 forced_cc_ids.add(n.id)
     forced_credits = sum(curriculum.nodes[cc].credits for cc in forced_cc_ids)
 
-    de_needed = max(0, curriculum.credit_rule.min_de_credits_total - forced_credits)
-    oe_needed = curriculum.credit_rule.min_oe_credits_total
+    passed_de_credits = sum(n.credits for n in curriculum.nodes.values()
+                            if n.category == "DE" and (n.course_id in student.passed_course_ids or n.id in student.satisfied_slot_ids))
+    passed_oe_credits = sum(n.credits for n in curriculum.nodes.values()
+                            if n.category == "OE" and (n.course_id in student.passed_course_ids or n.id in student.satisfied_slot_ids))
+
+    de_needed = max(0, curriculum.credit_rule.min_de_credits_total - forced_credits - passed_de_credits)
+    oe_needed = max(0, curriculum.credit_rule.min_oe_credits_total - passed_oe_credits)
 
     relevance_by_cc = load_career_relevance(curriculum.curriculum_version_id)
     career_area_names = set(student.career_interest_tags)
@@ -141,11 +148,27 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
     tier_d = try_tier(include_minor=False, end_sem=ext_end, label="D: no-minor @ extension") \
         if (not tier_a and not tier_b and not tier_c and ext_end) else []
 
-    def build_roadmap(results, status, adjustment, end_sem):
+    def build_roadmap(results, status, adjustment, end_sem, include_minor_val=False):
         scored = _score_all(results, curriculum, relevance_by_cc, career_area_names, standard_end)
         primary = scored[0]
         alternative = scored[1] if len(scored) > 1 else None
         primary_rendered = _render(primary, curriculum, requested_semester_hints)
+        
+        from .validator import validate_roadmap
+        errors = validate_roadmap(primary_rendered, curriculum, student, include_minor_val, all_minor_ids, forced_elective_codes)
+        if errors:
+            return {
+                "status": "CURRENTLY_INFEASIBLE",
+                "adjustment": None,
+                "requested_end_sem": end_sem,
+                "primary": None,
+                "alternative": None,
+                "n_valid_candidates_found": 0,
+                "risk_flags": [],
+                "engine_log": log,
+                "reason": f"Independent validation failed: {', '.join(errors)}"
+            }
+
         return {
             "status": status,
             "adjustment": adjustment,
@@ -161,8 +184,8 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
     if tier_a:
         # if a fallback/breadth alternative exists, surface it too even though the exact request succeeded
         alt_pool = tier_c if tier_c else []
-        result = build_roadmap(tier_a, "FEASIBLE", None, standard_end)
-        if alt_pool and not result["alternative"]:
+        result = build_roadmap(tier_a, "FEASIBLE", None, standard_end, include_minor_val=bool(all_minor_ids))
+        if alt_pool and not result.get("alternative"):
             alt_scored = _score_all(alt_pool, curriculum, relevance_by_cc, career_area_names, standard_end)
             result["alternative"] = _render(alt_scored[0], curriculum, requested_semester_hints)
         # a fully valid plan can still diverge from an explicit requested-semester preference for
@@ -174,7 +197,7 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
         return result
 
     if tier_b:
-        result = build_roadmap(tier_b, "FEASIBLE_WITH_ADJUSTMENT", "DEGREE_EXTENSION", ext_end)
+        result = build_roadmap(tier_b, "FEASIBLE_WITH_ADJUSTMENT", "DEGREE_EXTENSION", ext_end, include_minor_val=bool(all_minor_ids))
         if tier_c:
             alt_scored = _score_all(tier_c, curriculum, relevance_by_cc, career_area_names, standard_end)
             result["alternative"] = _render(alt_scored[0], curriculum, requested_semester_hints)
@@ -191,10 +214,10 @@ def generate_roadmap(student_id: int, forced_elective_codes=None, requested_seme
 
     if tier_c:
         adjustment = "REQUIREMENT_DROPPED"
-        return build_roadmap(tier_c, "FEASIBLE_WITH_ADJUSTMENT", adjustment, standard_end)
+        return build_roadmap(tier_c, "FEASIBLE_WITH_ADJUSTMENT", adjustment, standard_end, include_minor_val=False)
 
     if tier_d:
-        return build_roadmap(tier_d, "FEASIBLE_WITH_ADJUSTMENT", "DEGREE_EXTENSION+REQUIREMENT_DROPPED", ext_end)
+        return build_roadmap(tier_d, "FEASIBLE_WITH_ADJUSTMENT", "DEGREE_EXTENSION+REQUIREMENT_DROPPED", ext_end, include_minor_val=False)
 
     return {
         "status": "CURRENTLY_INFEASIBLE",
